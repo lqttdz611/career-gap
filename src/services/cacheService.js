@@ -113,3 +113,32 @@ export async function getAnalysisById(id) {
     throw error;
   }
 }
+
+/**
+ * Lấy tất cả analyses với phân trang
+ */
+export async function getAllAnalysesFromDb(limit = 10, offset = 0) {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM analyses ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+      [limit, offset],
+    );
+
+    return result.rows.map((row) => normalizeCachedRow(row));
+  } catch (error) {
+    console.error("Error getting all analyses:", error);
+    throw error;
+  }
+}
+
+/**
+ * Xóa analysis theo ID
+ */
+export async function deleteAnalysisById(id) {
+  try {
+    await pool.query("DELETE FROM analyses WHERE id = $1", [id]);
+  } catch (error) {
+    console.error("Error deleting analysis by ID:", error);
+    throw error;
+  }
+}

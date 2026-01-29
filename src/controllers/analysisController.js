@@ -3,8 +3,14 @@ import {
   getAnalysisById,
   getCachedAnalysis,
   saveAnalysis,
+  getAllAnalysesFromDb,
+  deleteAnalysisById,
 } from "../services/cacheService.js";
-import { deleteUploadedFile } from "../services/fileParse.js";
+import {
+  parseFile,
+  deleteUploadedFile,
+  cleanText,
+} from "../services/fileParse.js";
 import { createCacheKey } from "../utils/hash.js";
 
 function buildRoadmapMarkdown({
@@ -63,7 +69,6 @@ export async function analyzeGap(req, res) {
         console.log(`Resume file: ${req.files.resume[0].originalname}`);
         resumeText = await parseFile(resumeFilePath);
         resumeText = cleanText(resumeText);
-
       } else if (req.body.resume_text) {
         resumeText = req.body.resume_text;
       } else {
@@ -86,38 +91,38 @@ export async function analyzeGap(req, res) {
         });
       }
       // CASE Text input
-  } else if (req.body.resume_text && req.body.jd_text) {
-    console.log("🔍 Processing text input...");
-    resumeText = req.body.resume_text;
-    jdText = req.body.jd_text;
-  }
-  // CASE Invalid input
-  else {
-    return res.status(400).json({
-      error: "Both resume_text and jd_text are required (either file upload or text input)",
-    });
-  }
-
+    } else if (req.body.resume_text && req.body.jd_text) {
+      console.log("🔍 Processing text input...");
+      resumeText = req.body.resume_text;
+      jdText = req.body.jd_text;
+    }
+    // CASE Invalid input
+    else {
+      return res.status(400).json({
+        error:
+          "Both resume_text and jd_text are required (either file upload or text input)",
+      });
+    }
 
     // Validate input
-    if(resumeText.trim().length < 50) {
+    if (resumeText.trim().length < 50) {
       return res.status(400).json({
         error: "Resume text too short (minimum 50 characters)",
         length: resumeText.trim().length,
       });
     }
-    if(jdText.trim().length < 50) {
+    if (jdText.trim().length < 50) {
       return res.status(400).json({
         error: "Job description too short (minimum 50 characters)",
         length: jdText.trim().length,
       });
     }
-    console.log(` Resume length: ${resumeText.trim().length}, JD length: ${jdText.trim().length}`);
-
-
+    console.log(
+      ` Resume length: ${resumeText.trim().length}, JD length: ${jdText.trim().length}`,
+    );
 
     // 1. Tạo hash key
-    const resumeHash = createCacheKey(resume_text, jd_text);
+    const resumeHash = createCacheKey(resumeText, jdText);
 
     // 2. CHECK CACHE
     console.log("🔍 Checking cache...");
@@ -142,23 +147,23 @@ export async function analyzeGap(req, res) {
     console.log("❌ Cache MISS - Calling Gemini AI...");
 
     // 3. Gọi Gemini để phân tích
-    const analysisData = await analyzeWithGemini(resume_text, jd_text); // ĐỔI TÊN FUNCTION
+    const analysisData = await analyzeWithGemini(resumeText, jdText);
 
     // 4. Lưu vào database
     const saved = await saveAnalysis(
       resumeHash,
-      resume_text,
-      jd_text,
+      resumeText,
+      jdText,
       analysisData,
-      );
+    );
 
-      // delete uploaded files if any
-      if(resumeFilePath) {
-        await deleteUploadedFile(resumeFilePath);
-      }
-      if(jdFilePath) {
-        await deleteUploadedFile(jdFilePath);
-      }
+    // delete uploaded files if any
+    if (resumeFilePath) {
+      await deleteUploadedFile(resumeFilePath);
+    }
+    if (jdFilePath) {
+      await deleteUploadedFile(jdFilePath);
+    }
 
     // 5. Trả về kết quả
     return res.status(201).json({
@@ -227,13 +232,14 @@ export async function getAllAnalyses(req, res) {
   try {
     const limit = parseInt(req.query.limit) || 10;
     const offset = parseInt(req.query.offset) || 0;
-    const analyses = await getAllAnalyses(limit, offset);
 
-    res.json({
+    const analyses = await getAllAnalysesFromDb(limit, offset);
+
+    return res.status(200).json({
       data: analyses,
       limit,
       offset,
-    })
+    });
   } catch (error) {
     console.error("❌ Error in getAllAnalyses:", error);
     return res.status(500).json({
@@ -244,10 +250,10 @@ export async function getAllAnalyses(req, res) {
 }
 
 // DELETE /api/analysis/:id - Xóa phân tích theo ID
-export async function deleteAnalysisById(req, res) {
+export async function deleteAnalysisByIdHandler(req, res) {
   try {
     const { id } = req.params;
-    await deleteAnalysisById(parseInt(id));
+    await deleteAnalysisById(parseInt(id, 10));
     return res.status(200).json({
       message: "Analysis deleted successfully",
     });

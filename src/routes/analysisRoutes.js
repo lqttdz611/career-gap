@@ -1,6 +1,11 @@
 import express from "express";
 import { uploadFiles } from "../config/multer.js";
-import { analyzeGap, deleteAnalysisById, getAllAnalyses, getAnalysis } from "../controllers/analysisController.js";
+import {
+  analyzeGap,
+  getAllAnalyses,
+  getAnalysis,
+  deleteAnalysisByIdHandler,
+} from "../controllers/analysisController.js";
 const router = express.Router();
 
 // POST /api/analyze - Tạo phân tích mới
@@ -12,5 +17,5 @@ router.get("/analysis/:id", getAnalysis);
 // GET /api/analysis - Lấy tất cả phân tích
 router.get("/analysis", getAllAnalyses);
 // DELETE /api/analysis/:id - Xóa phân tích theo ID
-router.delete("/analysis/:id", deleteAnalysisById);
+router.delete("/analysis/:id", deleteAnalysisByIdHandler);
 export default router;
