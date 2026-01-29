@@ -1,10 +1,11 @@
-import { createCacheKey } from "../utils/hash.js";
+import { analyzeWithGemini } from "../services/aiService.js";
 import {
+  getAnalysisById,
   getCachedAnalysis,
   saveAnalysis,
-  getAnalysisById,
 } from "../services/cacheService.js";
-import { analyzeWithGemini } from "../services/aiService.js"; // ĐỔI TÊN IMPORT
+import { deleteUploadedFile } from "../services/fileParse.js";
+import { createCacheKey } from "../utils/hash.js";
 
 function buildRoadmapMarkdown({
   missing_skills,
@@ -45,29 +46,75 @@ function buildRoadmapMarkdown({
 
 /**
  * POST /api/analyze
+ * Analyze gap - support file upload and text input
  */
 export async function analyzeGap(req, res) {
+  let resumeFilePath = null;
+  let jdFilePath = null;
   try {
-    const { resume_text, jd_text } = req.body;
+    let resumeText, jdText;
+    // Case upload files
+    if (req.files && (req.files.resume || req.files.jd)) {
+      console.log("🔍 Processing uploaded files...");
+
+      // parse "resume" file
+      if (req.files.resume && req.files.resume[0]) {
+        resumeFilePath = req.files.resume[0].path;
+        console.log(`Resume file: ${req.files.resume[0].originalname}`);
+        resumeText = await parseFile(resumeFilePath);
+        resumeText = cleanText(resumeText);
+
+      } else if (req.body.resume_text) {
+        resumeText = req.body.resume_text;
+      } else {
+        return res.status(400).json({
+          error: "Resume file is required (either file upload or text",
+        });
+      }
+
+      // parse "jd" file
+      if (req.files.jd && req.files.jd[0]) {
+        jdFilePath = req.files.jd[0].path;
+        console.log(`JD file: ${req.files.jd[0].originalname}`);
+        jdText = await parseFile(jdFilePath);
+        jdText = cleanText(jdText);
+      } else if (req.body.jd_text) {
+        jdText = req.body.jd_text;
+      } else {
+        return res.status(400).json({
+          error: "JD file is required (either file upload or text input)",
+        });
+      }
+      // CASE Text input
+  } else if (req.body.resume_text && req.body.jd_text) {
+    console.log("🔍 Processing text input...");
+    resumeText = req.body.resume_text;
+    jdText = req.body.jd_text;
+  }
+  // CASE Invalid input
+  else {
+    return res.status(400).json({
+      error: "Both resume_text and jd_text are required (either file upload or text input)",
+    });
+  }
+
 
     // Validate input
-    if (!resume_text || !jd_text) {
-      return res.status(400).json({
-        error: "Both resume_text and jd_text are required",
-      });
-    }
-
-    if (resume_text.trim().length < 50) {
+    if(resumeText.trim().length < 50) {
       return res.status(400).json({
         error: "Resume text too short (minimum 50 characters)",
+        length: resumeText.trim().length,
       });
     }
-
-    if (jd_text.trim().length < 50) {
+    if(jdText.trim().length < 50) {
       return res.status(400).json({
         error: "Job description too short (minimum 50 characters)",
+        length: jdText.trim().length,
       });
     }
+    console.log(` Resume length: ${resumeText.trim().length}, JD length: ${jdText.trim().length}`);
+
+
 
     // 1. Tạo hash key
     const resumeHash = createCacheKey(resume_text, jd_text);
@@ -103,7 +150,15 @@ export async function analyzeGap(req, res) {
       resume_text,
       jd_text,
       analysisData,
-    );
+      );
+
+      // delete uploaded files if any
+      if(resumeFilePath) {
+        await deleteUploadedFile(resumeFilePath);
+      }
+      if(jdFilePath) {
+        await deleteUploadedFile(jdFilePath);
+      }
 
     // 5. Trả về kết quả
     return res.status(201).json({
@@ -121,6 +176,12 @@ export async function analyzeGap(req, res) {
   } catch (error) {
     console.error("❌ Error in analyzeGap:", error);
 
+    if (resumeFilePath) {
+      await deleteUploadedFile(resumeFilePath);
+    }
+    if (jdFilePath) {
+      await deleteUploadedFile(jdFilePath);
+    }
     return res.status(500).json({
       error: "Analysis failed",
       message: error.message,
@@ -156,6 +217,44 @@ export async function getAnalysis(req, res) {
     console.error("❌ Error in getAnalysis:", error);
     return res.status(500).json({
       error: "Failed to retrieve analysis",
+      message: error.message,
+    });
+  }
+}
+
+// GET /api/analysis - Lấy tất cả phân tích
+export async function getAllAnalyses(req, res) {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = parseInt(req.query.offset) || 0;
+    const analyses = await getAllAnalyses(limit, offset);
+
+    res.json({
+      data: analyses,
+      limit,
+      offset,
+    })
+  } catch (error) {
+    console.error("❌ Error in getAllAnalyses:", error);
+    return res.status(500).json({
+      error: "Failed to retrieve all analyses",
+      message: error.message,
+    });
+  }
+}
+
+// DELETE /api/analysis/:id - Xóa phân tích theo ID
+export async function deleteAnalysisById(req, res) {
+  try {
+    const { id } = req.params;
+    await deleteAnalysisById(parseInt(id));
+    return res.status(200).json({
+      message: "Analysis deleted successfully",
+    });
+  } catch (error) {
+    console.error("❌ Error in deleteAnalysisById:", error);
+    return res.status(500).json({
+      error: "Failed to delete analysis",
       message: error.message,
     });
   }
