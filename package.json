@@ -1,0 +1,28 @@
+{
+  "name": "career-gap-be",
+  "version": "1.0.0",
+  "description": "Career Gap Analyzer API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "cors": "^2.8.6",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.1",
+    "mammoth": "^1.11.0",
+    "multer": "^2.0.2",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.17.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.11"
+  }
+}
